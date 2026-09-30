@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Mera Vyapaar</string>
+    <string name="title_activity_main">Mera Vyapaar</string>
+    <string name="package_name">com.meravyapaar.app</string>
+    <string name="custom_url_scheme">com.meravyapaar.app</string>
+</resources>

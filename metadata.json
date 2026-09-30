@@ -1,0 +1,6 @@
+{
+  "name": "Mera Vyapaar",
+  "description": "Offline-first vernacular business advisory, voice khata ledger, alternative credit scoring, and government scheme matching for rural micro-entrepreneurs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

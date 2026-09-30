@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "579947679130",
+    "project_id": "mera-vyapaar",
+    "storage_bucket": "mera-vyapaar.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:579947679130:android:1309eb3c0396efc2a3fe23",
+        "android_client_info": {
+          "package_name": "com.meravyapaar.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAKg9YH0eRp942X8-ke1URM575dFZKPb80"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

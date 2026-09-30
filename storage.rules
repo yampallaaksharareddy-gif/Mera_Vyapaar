@@ -1,0 +1,17 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Strict ownership rule: Authenticated business owners can only read,
+    // upload, and delete customer profile photos inside their own storage path.
+    match /customerPhotos/{uid}/{customerId}/{allPaths=**} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Default deny for all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

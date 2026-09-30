@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0a09" />
+      <stop offset="100%" stop-color="#1c1917" />
+    </linearGradient>
+    <linearGradient id="brandGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#d97706" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#059669" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+
+  <!-- Subtle Inner Border -->
+  <rect x="8" y="8" width="496" height="496" rx="104" fill="none" stroke="#292524" stroke-width="6" />
+
+  <!-- Ambient Glow -->
+  <circle cx="256" cy="256" r="180" fill="url(#glowGrad)" />
+
+  <!-- Brand Card Container -->
+  <rect x="96" y="96" width="320" height="320" rx="72" fill="url(#brandGrad)" />
+  <rect x="100" y="100" width="312" height="312" rx="68" fill="none" stroke="#ffffff" stroke-width="4" stroke-opacity="0.3" />
+
+  <!-- Stylized Vernacular Brand Glyph 'व्या' -->
+  <text x="256" y="325" font-family="'Plus Jakarta Sans', 'Rozha One', 'Yantramanav', 'Noto Sans Devanagari', 'Mukta', 'Segoe UI', serif, sans-serif" font-size="200" font-weight="800" text-anchor="middle" fill="#ffffff">व्या</text>
+
+  <!-- Micro Enterprise Coin Accent -->
+  <circle cx="360" cy="150" r="18" fill="#fbbf24" stroke="#ffffff" stroke-width="4" />
+</svg>

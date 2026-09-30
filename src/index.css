@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/* Android/iOS safe-area support */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+}
+
+/* Keep the top header below the Android status bar/camera cutout */
+header {
+  padding-top: var(--safe-area-top);
+}
+/* Mobile Android safe area */
+@media (max-width: 640px) {
+  header {
+    padding-top: max(var(--safe-area-top), 24px) !important;
+  }
+}
+
+
+/* Keep bottom navigation above Android gesture/navigation area */
+body {
+  padding-bottom: var(--safe-area-bottom);
+}
+
+/* Mobile layout foundation */
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+textarea,
+pre,
+code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.safe-bottom {
+  padding-bottom: max(0.375rem, var(--safe-area-bottom));
+}
+
+/* Prevent common long labels/IDs from creating horizontal overflow */
+[class*="font-mono"] {
+  overflow-wrap: anywhere;
+}
+
+/* Narrow phones: reduce large container padding while preserving desktop spacing */
+@media (max-width: 640px) {
+  .overflow-x-auto {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .overflow-x-auto::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Tables remain usable without breaking the page width */
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
