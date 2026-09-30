@@ -1608,6 +1608,6 @@ if (process.env.NODE_ENV === 'production') {
   app.use(vite.middlewares);
 }
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Mera Vyapaar server running on port ${PORT}`);
 });
