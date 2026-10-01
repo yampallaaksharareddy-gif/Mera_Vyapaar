@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json());
 
@@ -33,16 +33,11 @@ const defaultCorsOrigins = new Set([
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  const isAllowedOrigin = (testOrigin: string): boolean => {
-    if (configuredCorsOrigins.length > 0) {
-      return configuredCorsOrigins.includes(testOrigin) || testOrigin.startsWith('capacitor://');
-    }
-    return defaultCorsOrigins.has(testOrigin) || testOrigin.startsWith('capacitor://');
-  };
-
-  if (origin && isAllowedOrigin(origin)) {
+  if (origin) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Vary', 'Origin');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
 
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
@@ -1112,137 +1107,53 @@ Return ONLY a valid JSON array of objects with the following schema:
   }
 });
 
-const GEMINI_MODEL_HIERARCHY = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
-  'gemini-2.5-pro'
-];
+// Configure this in Render as GEMINI_MODEL. The default follows the model
+// recommended by the error returned in the supplied Render logs.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
 
-async function generateWithModelHierarchy(ai: any, contents: any, config?: any) {
-  let lastError = null;
-  for (const model of GEMINI_MODEL_HIERARCHY) {
-    // Try first with full config (including tools if any)
-    try {
-      console.log(`[Gemini Hierarchy] Trying model: ${model} with config`);
-      const response = await ai.models.generateContent({
-        model,
-        contents,
-        config
-      });
-      if (response && response.text) {
-        return { text: response.text, modelUsed: model };
-      }
-    } catch (err: any) {
-      console.warn(`[Gemini Hierarchy] Model ${model} with config failed:`, err?.message || err);
-      lastError = err;
+async function generateWithModelHierarchy(ai: any, contents: string, config?: any) {
+  console.log(`[Gemini] Request started; model=${GEMINI_MODEL}`);
+
+  try {
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents,
+      config
+    });
+
+    const text = response?.text?.trim();
+    if (!text) {
+      throw new Error(`Gemini returned an empty response for ${GEMINI_MODEL}`);
     }
 
-    // Try fallback without tools/special config on same model
-    if (config?.tools) {
-      try {
-        console.log(`[Gemini Hierarchy] Retrying model: ${model} without tools`);
-        const { tools, ...restConfig } = config;
-        const response = await ai.models.generateContent({
-          model,
-          contents,
-          config: restConfig
-        });
-        if (response && response.text) {
-          return { text: response.text, modelUsed: `${model} (no-tools)` };
-        }
-      } catch (err2: any) {
-        console.warn(`[Gemini Hierarchy] Model ${model} without tools also failed:`, err2?.message || err2);
-        lastError = err2;
-      }
-    }
+    console.log(`[Gemini] Request succeeded; model=${GEMINI_MODEL}`);
+    return { text, modelUsed: GEMINI_MODEL };
+  } catch (err: any) {
+    // Log diagnostic metadata only; never log API keys, prompts, or ledger data.
+    console.error('[Gemini] Generation failed', {
+      model: GEMINI_MODEL,
+      status: err?.status ?? err?.statusCode ?? null,
+      code: err?.code ?? null,
+      message: err?.message ?? 'Unknown Gemini error'
+    });
+    throw err;
   }
-  throw lastError || new Error('All models in Gemini hierarchy failed.');
-}
-
-function getSmartFallbackReply(prompt: string, language: string, ledgerSummary: string): string {
-  const fallbackByLang: Record<string, string> = {
-    hi: `(व्यापार मित्र एआई - विश्वसनीय सलाहकार)
-
-नमस्ते! आपके व्यापार और खाता संदर्भ (${ledgerSummary || 'दैनिक व्यापार संचालन'}) के आधार पर मुख्य सलाह:
-
-1. **नकदी प्रवाह (Cash Flow) प्रबंधन**: अपनी दैनिक बिक्री और खर्चों का नियमित हिसाब रखें ताकि आपका डिजिटल बहीखाता व्यवस्थित रहे।
-2. **कार्यशील पूंजी (Working Capital)**: आगामी मौसम के माल या स्टॉक खरीद के लिए 15-20% आपातकालीन नकदी सुरक्षित रखें।
-3. **सरकारी योजनाएं एवं ऋण**: आप अपनी आधिकारिक पात्रता के अनुसार पीएम मुद्रा योजना (शिशु/किशोर) या PMEGP योजनाओं की जानकारी प्राप्त कर सकते हैं।
-4. **मंडी भाव तुलना**: कृषि उपज बेचने से पूर्व निकटतम APMC थोक मंडियों के दरों की तुलना अवश्य करें।
-
-कृपया अपना प्रश्न पुनः पूछें या वॉयस खाता एवं बिल स्कैनर का उपयोग जारी रखें!`,
-
-    mr: `(व्यापार मित्र एआय - मार्गदर्शक मोड)
-
-नमस्कार! आपल्या व्यवसाय व खातेवही संदर्भ (${ledgerSummary || 'दैनंदिन व्यवसाय नोंद'}) नुसार आमचा सल्ला:
-
-1. **रोख प्रवाह (Cashflow) शिस्त**: दैनंदिन जमा-खर्चाची नियमित नोंद ठेवा, ज्यामुळे तुमचे डिजिटल बहीखाता अद्ययावत राहील.
-2. **खेळते भांडवल (Working Capital)**: नवीन माल खरेदीसाठी १५-२०% राखीव निधी जवळ ठेवा.
-3. **सरकारी योजना**: आपल्या अधिकृत पात्रतेनुसार पीएम मुद्रा योजना व PMEGP योजनांची माहिती घ्या.
-4. **बाजार समिती सल्ला**: शेतमाल विक्रीपूर्वी नजीकच्या कृषी उत्पन्न बाजार समित्यांच्या दरांची पडताळणी करा.
-
-कृपया आपला प्रश्न पुन्हा विचारा किंवा व्हॉईस खाते आणि बिल स्कॅनरचा वापर सुरू ठेवा!`,
-
-    te: `(వ్యాపార మిత్ర ఏఐ - సలహాదారు మోడ్)
-
-నమస్కారం! మీ వ్యాపార లావాదేవీలు మరియు ఖాతా రికార్డుల (${ledgerSummary || 'రోజువారీ వ్యాపార నిర్వహణ'}) ఆధారంగా మా ముఖ్య సూచనలు:
-
-1. **నగదు ప్రవాహం (Cash Flow)**: రోజువారీ అమ్మకాలు, కొనుగోళ్లను క్రమబద్ధంగా నమోదు చేసుకోండి.
-2. **పని మూలధనం (Working Capital)**: వ్యాపార అవసరాల కోసం కనీసం 15-20% అత్యవసర నిల్వ ఉంచండి.
-3. **ప్రభుత్వ పథకాలు**: మీ అధికారిక అర్హతల ఆధారంగా PM ముద్ర యోజన లేదా PMEGP పథకాల సమాచారాన్ని పరిశీలించండి.
-4. **మండీ ధరలు**: పంటను విక్రయించే ముందు సమీప APMC మార్కెట్ యార్డు ధరలను తనిఖీ చేయండి.
-
-దయచేసి మీ ప్రశ్నను మళ్లీ అడగండి లేదా వాయిస్ ఖాతా మరియు బిల్ స్కానర్‌ను ఉపయోగించండి!`,
-
-    ta: `(வியாபார மித்ரா ஏஐ - ஆலோசகர் பயன்முறை)
-
-வணக்கம்! உங்கள் வணிக கணக்கு மற்றும் பணப்புழக்கம் (${ledgerSummary || 'தினசரி வர்த்தக பதிவு'}) அடிப்படையிலான முக்கிய ஆலோசனைகள்:
-
-1. **பணப்புழக்க ஒழுக்கம்**: தினசரி வரவு செலவுகளை தொடர்ச்சியாக பதிவு செய்து டிஜிட்டல் கணக்கை பராமரிக்கவும்.
-2. **நடைமுறை மூலதனம்**: புதிய சரக்குகள் வாங்க 15-20% சேமிப்பை ரொக்கமாக வைத்திருங்கள்.
-3. **அரசு திட்டங்கள்**: உங்கள் தகுதிக்கு ஏற்ப பிஎம் முத்ரா திட்டம் அல்லது PMEGP திட்டங்களை பரிசீலிக்கவும்.
-4. **மண்டி விற்பனை வழிகாட்டுதல்**: உழவர் சந்தை அல்லது APMC ஒழுங்குமுறை விற்பனைக்கூட நிலவரத்தை கவனித்து விற்பனை செய்யவும்.
-
-தயவுசெய்து உங்கள் கேள்வியை மீண்டும் கேட்கவும் அல்லது வாய்ஸ் கணக்கு மற்றும் பில் ஸ்கேனரை பயன்படுத்தவும்!`,
-
-    bn: `(ব্যাপার মিত্র এআই - সাধারণ নির্দেশিকা)
-
-নমস্কার! আপনার ব্যবসার খাতা ও নগদ প্রবাহের (${ledgerSummary || 'দৈনিক ব্যবসায়িক লেনদেন'}) ভিত্তিতে প্রধান পরামর্শ:
-
-1. **নগদ প্রবাহ (Cash Flow) শৃঙ্খলা**: প্রতিদিনের বিক্রয় ও খরচের সঠিক হিসাব রাখুন।
-2. **চলতি মূলধন (Working Capital)**: দোকানে নতুন মাল তোলার জন্য ১৫-২০% জরুরি নগদ অর্থ সংরক্ষণ করুন।
-3. **সরকারি প্রকল্প**: আপনার যোগ্যতা অনুযায়ী পিএম মুদ্রা যোজনা বা PMEGP প্রকল্পগুলো সম্পর্কে খোঁজ নিন।
-4. **মান্ডি দর পরামর্শ**: পণ্য বিক্রয়ের পূর্বে নিকটবর্তী এগ্রিকালচারাল মান্ডির দর পর্যবেক্ষণ করুন।
-
-অনুগ্রহ করে আপনার প্রশ্নটি পুনরায় জিজ্ঞাসা করুন অথবা ভয়েস খাতা ও বিল স্ক্যানার ব্যবহার অব্যাহত রাখুন!`,
-
-    en: `(Vyapaar Mitra AI - Advisor Mode)
-
-Namaste! Based on your business ledger context (${ledgerSummary || 'Standard micro-enterprise operations'}):
-
-1. **Cash-Flow Discipline**: Record all daily cash inflows and outflows to build a consistent digital ledger history.
-2. **Working Capital Buffer**: Maintain a cash safety reserve (15-20%) for seasonal inventory restocking.
-3. **Government Scheme Guidance**: You may explore programs like PM MUDRA (Shishu/Kishore) or PMEGP depending on your official profile eligibility.
-4. **APMC Mandi Comparison**: Check nearby APMC wholesale market trends before selling produce to optimize pricing.
-
-Please try your question again or continue using your Voice Khata and Bill Scanner!`
-  };
-
-  return fallbackByLang[language] || fallbackByLang.en;
 }
 
 app.post('/api/ai/chat', async (req, res) => {
-  let prompt = '';
-  let language = 'en';
-  let ledgerSummary = '';
   try {
     const body = req.body || {};
-    prompt = body.prompt || '';
-    language = body.language || 'en';
-    ledgerSummary = body.ledgerSummary || '';
-    const history = body.history || [];
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    const language = typeof body.language === 'string' ? body.language : 'en';
+    const ledgerSummary = typeof body.ledgerSummary === 'string' ? body.ledgerSummary : '';
+    const history = Array.isArray(body.history) ? body.history : [];
+
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Please enter a question.' });
+    }
+    if (prompt.length > 8000) {
+      return res.status(413).json({ success: false, error: 'Your question is too long. Please shorten it.' });
+    }
 
     const langDetails: Record<string, { name: string; native: string; script: string }> = {
       hi: { name: 'Hindi', native: 'हिन्दी', script: 'Devanagari' },
@@ -1256,47 +1167,46 @@ app.post('/api/ai/chat', async (req, res) => {
 
     const ai = getAIClient();
     if (!ai) {
-      const fallbackReply = getSmartFallbackReply(prompt, language, ledgerSummary);
-      return res.json({
-        success: true,
-        reply: fallbackReply,
-        modelUsed: 'Vyapaar Mitra Smart Fallback Engine (No API Key)'
+      console.error('[AI Chat] Gemini client unavailable; check GEMINI_API_KEY.');
+      return res.status(503).json({
+        success: false,
+        error: 'AI service is not configured. Please check the server API key.'
       });
     }
 
-    const systemPersona = `You are "Vyapaar Mitra AI", the senior vernacular financial advisor, agri-agronomist, and MUDRA micro-credit expert for rural Indian micro-entrepreneurs, small shopkeepers, and farmers.
+    const safeHistory = history.slice(-10).map((item: any) => ({
+      role: item?.role === 'assistant' ? 'assistant' : 'user',
+      text: typeof item?.text === 'string' ? item.text.slice(0, 4000) : ''
+    })).filter((item: any) => item.text);
 
-MANDATORY LANGUAGE ENFORCEMENT:
-- Target Output Language: ${selectedLang.name} (${selectedLang.native})
-- Target Script: ${selectedLang.script}
-- You MUST generate your ENTIRE response strictly in ${selectedLang.name} (${selectedLang.native}) using the ${selectedLang.script} script.
-- Even if the user question is written in English, mixed Hinglish/Telugish, or latin transliteration, you MUST understand it and respond 100% in ${selectedLang.name} (${selectedLang.native}).
-- Do NOT reply in English unless the target output language is English.
+    const systemPersona = `You are "Vyapaar Mitra AI", a practical business advisor for Indian small businesses, shopkeepers, and farmers.
 
-User business ledger context: ${ledgerSummary || 'Standard micro-enterprise operations'}.
+MANDATORY LANGUAGE: Respond entirely in ${selectedLang.name} (${selectedLang.native}) using the ${selectedLang.script} script. Understand English, mixed-language, and transliterated questions, but answer in the selected language.
 
-Tone: Empathetic, practical, accurate, and encouraging. Structure your advice cleanly with bullet points, numbers, and actionable next steps.`;
+Use the user's business context only when relevant: ${ledgerSummary || 'No ledger summary was provided.'}. Do not invent transactions, prices, eligibility, live market data, or facts. For current prices, schemes, or time-sensitive questions, use Google Search grounding when available, state the date/source context where possible, and clearly say when verified information is unavailable. Give direct answers to the actual question, ask a clarifying question when needed, and provide practical next steps.`;
 
-    const fullPrompt = `${systemPersona}\n\nChat History:\n${history.map((h: any) => `${h.role}: ${h.text}`).join('\n')}\n\nUser Question (Respond in ${selectedLang.name}): ${prompt}`;
+    const historyText = safeHistory.map((item: any) => `${item.role}: ${item.text}`).join('\n');
+    const fullPrompt = `${systemPersona}\n\nRecent conversation:\n${historyText || '(No previous conversation)'}\n\nUser question: ${prompt}`;
 
     const result = await generateWithModelHierarchy(ai, fullPrompt, {
       temperature: 0.3,
       tools: [{ googleSearch: {} }]
     });
 
-    res.json({
-      success: true,
-      reply: result.text,
-      modelUsed: result.modelUsed
-    });
+    return res.json({ success: true, reply: result.text, modelUsed: result.modelUsed });
   } catch (err: any) {
-    console.warn('AI chat error across hierarchy, falling back to smart advisory:', err?.message || err);
-    const fallbackReply = getSmartFallbackReply(prompt, language, ledgerSummary);
-    res.json({
-      success: true,
-      reply: fallbackReply,
-      modelUsed: 'Vyapaar Mitra Smart Fallback Engine (Rate-Limit Handled)'
+    console.error('[AI Chat] Request failed', {
+      status: err?.status ?? err?.statusCode ?? null,
+      code: err?.code ?? null,
+      message: err?.message ?? 'Unknown AI service error'
     });
+
+    if (!res.headersSent) {
+      return res.status(502).json({
+        success: false,
+        error: 'The AI could not generate a response. Please try again shortly.'
+      });
+    }
   }
 });
 
