@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Camera, CheckCircle2, ImagePlus, User, X, RefreshCw } from 'lucide-react';
-import { saveCustomerProfileToFirestore } from '../services/firebase';
+import { auth, saveCustomerProfileToFirestore } from '../services/firebase';
 
 export type CustomerGender = 'female' | 'male' | 'other';
 export type CustomerSocialCategory = 'general' | 'obc' | 'sc' | 'st' | 'minority';
@@ -161,11 +161,12 @@ export const CustomerProfileModal: React.FC<CustomerProfileModalProps> = ({
     setError('');
 
     let updatedProfile = { ...profile };
+    const activeUid = authUid || auth.currentUser?.uid;
 
     try {
-      if (authUid) {
+      if (activeUid) {
         const firestoreDoc = await saveCustomerProfileToFirestore(
-          authUid,
+          activeUid,
           phoneNumber,
           profile,
           selectedPhotoFile

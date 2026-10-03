@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { Sparkles, Send, Bot, User, RefreshCw, CheckCircle2, Mic, MicOff, Radio, Volume2 } from 'lucide-react';
+import { Sparkles, Send, Bot, User, RefreshCw, CheckCircle2, Mic, MicOff } from 'lucide-react';
 import { LedgerEntry, SupportedLanguage } from '../types';
 import { TRANSLATIONS } from '../constants/translations';
 import { bhashiniSTTEngine, BHASHINI_LANG_CODES } from '../services/bhashiniSttService';
@@ -50,7 +49,7 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
   ]);
   const [inputPrompt, setInputPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeModelUsed, setActiveModelUsed] = useState<string>('gemini-3.8-flash');
+  const [activeModelUsed, setActiveModelUsed] = useState<string>('Gemini AI');
 
   // Bhashini STT Engine State
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -63,7 +62,6 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
 
   const langConfig = BHASHINI_LANG_CODES[currentLang] || BHASHINI_LANG_CODES.en;
 
-  // Localized UI text for selected language
   const uiText = {
     hi: {
       advisorTitle: 'व्यापार मित्र एआई सलाहकार',
@@ -192,7 +190,6 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
     }
   ];
 
-  // Update initial welcome message when selected language changes
   useEffect(() => {
     setMessages((prev) => {
       if (prev.length <= 1) {
@@ -309,48 +306,46 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
           prompt,
           language: currentLang,
           ledgerSummary,
-          history: messages.slice(-6).map(m => ({ role: m.role, text: m.text }))
+          history: messages.slice(-10).map((m) => ({ role: m.role, text: m.text }))
         })
       });
 
-      console.log('AI Advisor API:', apiUrl('/api/ai/chat'));
-
-      if (!response.ok) {
-        throw new Error(`AI API request failed with HTTP ${response.status}`);
+      const data: any = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success !== true || typeof data?.reply !== 'string' || !data.reply.trim()) {
+        throw new Error(data?.error || `AI request failed (HTTP ${response.status})`);
       }
 
-      const data = await response.json();
-      if (data.success && data.reply) {
-        if (data.modelUsed) {
-          setActiveModelUsed(data.modelUsed);
-        }
-        const aiMsg: ChatMessage = {
-          id: `msg-ai-${Date.now()}`,
-          role: 'assistant',
-          text: data.reply,
-          modelUsed: data.modelUsed,
-          timestamp: Date.now()
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-      } else {
-        const errorFallback = getWelcomeMessage(currentLang, userName);
-        const errorMsg: ChatMessage = {
-          id: `msg-err-${Date.now()}`,
-          role: 'assistant',
-          text: uiText.networkError,
-          timestamp: Date.now()
-        };
-        setMessages((prev) => [...prev, errorMsg]);
-      }
-    } catch (err) {
-      console.warn('AI Advisor request failed:', err);
-      const errorMsg: ChatMessage = {
-        id: `msg-err-${Date.now()}`,
+      const modelUsed = data.modelUsed || 'Gemini AI';
+      setActiveModelUsed(modelUsed);
+      const aiMsg: ChatMessage = {
+        id: `msg-ai-${Date.now()}`,
         role: 'assistant',
-        text: uiText.networkError,
+        text: data.reply.trim(),
+        modelUsed,
         timestamp: Date.now()
       };
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => [...prev, aiMsg]);
+    } catch (err: any) {
+      console.error('AI Advisor request failed:', err);
+      const aiMsg: ChatMessage = {
+        id: `msg-error-${Date.now()}`,
+        role: 'assistant',
+        text: currentLang === 'te'
+          ? 'ప్రస్తుతం AI సమాధానం రూపొందించలేకపోయింది. దయచేసి కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి.'
+          : currentLang === 'hi'
+            ? 'अभी AI जवाब नहीं दे सका। कृपया थोड़ी देर बाद फिर कोशिश करें।'
+            : currentLang === 'mr'
+              ? 'आत्ता AI उत्तर तयार करू शकले नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा.'
+              : currentLang === 'ta'
+                ? 'தற்போது AI பதிலை உருவாக்க முடியவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.'
+                : currentLang === 'bn'
+                  ? 'এই মুহূর্তে AI উত্তর তৈরি করতে পারেনি। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।'
+                  : 'I could not generate an AI response right now. Please try again shortly.',
+        modelUsed: 'Service unavailable',
+        timestamp: Date.now()
+      };
+      setActiveModelUsed('Service unavailable');
+      setMessages((prev) => [...prev, aiMsg]);
     } finally {
       setIsLoading(false);
     }

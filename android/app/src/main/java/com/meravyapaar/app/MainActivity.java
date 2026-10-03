@@ -3,13 +3,13 @@ package com.meravyapaar.app;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -33,7 +33,7 @@ public class MainActivity extends BridgeActivity {
 
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().setWebChromeClient(
-                    new WebChromeClient() {
+                    new BridgeWebChromeClient(getBridge()) {
                         @Override
                         public void onPermissionRequest(final PermissionRequest request) {
                             runOnUiThread(() -> {
@@ -60,7 +60,7 @@ public class MainActivity extends BridgeActivity {
                                     }
                                 }
 
-                                request.deny();
+                                super.onPermissionRequest(request);
                             });
                         }
                     }

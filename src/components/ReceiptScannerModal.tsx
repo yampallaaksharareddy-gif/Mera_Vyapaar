@@ -15,6 +15,7 @@ import {
 import { LedgerEntry, SupportedLanguage, TransactionType } from '../types';
 import { apiUrl } from '../utils/apiUrl';
 import { parseReceiptOcrText } from '../utils/receiptParser';
+import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 interface ReceiptScannerModalProps {
   currentLang: SupportedLanguage;
@@ -206,6 +207,38 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
     }
   };
 
+  const handlePickReceipt = async () => {
+    try {
+      const photo = await CapacitorCamera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        correctOrientation: true,
+      });
+
+      if (!photo.dataUrl) {
+        throw new Error('No image was returned');
+      }
+
+      setFileName(`receipt-${Date.now()}.jpg`);
+      setOcrError(null);
+      setImagePreview(photo.dataUrl);
+      setScanComplete(false);
+      await runRealBhashiniOcr(photo.dataUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? '');
+      if (/cancel|cancelled|canceled/i.test(message)) return;
+
+      console.error('Receipt camera/gallery error:', error);
+      setOcrError(
+        currentLang === 'hi'
+          ? 'कैमरा या गैलरी नहीं खुल सकी। कृपया फिर से कोशिश करें।'
+          : 'Could not open the camera or gallery. Please try again.'
+      );
+    }
+  };
+
   const runRealBhashiniOcr = async (base64Image: string) => {
     if (!base64Image) return;
 
@@ -315,7 +348,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
         {/* Scanner Viewport / Upload Zone */}
         {!imagePreview ? (
           <div
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => void handlePickReceipt()}
             className="border-2 border-dashed border-stone-700 hover:border-emerald-500/80 bg-stone-950/60 rounded-3xl p-5 sm:p-10 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3 group"
           >
             <div className="w-16 h-16 rounded-3xl bg-stone-800 group-hover:bg-emerald-500/20 flex items-center justify-center text-stone-400 group-hover:text-emerald-400 transition">
@@ -331,10 +364,14 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
             </div>
             <button
               type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void handlePickReceipt();
+              }}
               className="mt-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-emerald-950"
             >
               <Upload className="w-4 h-4" />
-              <span>{currentLang === 'hi' ? 'फोटो चुनें' : 'Snap / Upload Receipt'}</span>
+              <span>{currentLang === 'hi' ? 'स्कैन / अपलोड' : 'SCAN / UPLOAD'}</span>
             </button>
           </div>
         ) : (
@@ -375,7 +412,7 @@ export const ReceiptScannerModal: React.FC<ReceiptScannerModalProps> = ({
             <div className="relative z-10 mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-800">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => void handlePickReceipt()}
                 className="px-3.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-medium transition flex items-center gap-1.5"
               >
                 <RotateCcw className="w-3.5 h-3.5" />

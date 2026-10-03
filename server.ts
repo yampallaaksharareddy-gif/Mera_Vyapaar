@@ -1109,7 +1109,7 @@ Return ONLY a valid JSON array of objects with the following schema:
 
 // Configure this in Render as GEMINI_MODEL. The default follows the model
 // recommended by the error returned in the supplied Render logs.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 
 async function generateWithModelHierarchy(ai: any, contents: string, config?: any) {
   console.log(`[Gemini] Request started; model=${GEMINI_MODEL}`);
