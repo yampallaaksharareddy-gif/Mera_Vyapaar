@@ -2,6 +2,7 @@ package com.meravyapaar.app;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.os.Bundle;
 import android.webkit.PermissionRequest;
 
 import androidx.annotation.NonNull;
@@ -15,6 +16,11 @@ public class MainActivity extends BridgeActivity {
 
     private static final int RECORD_AUDIO_REQUEST_CODE = 1001;
     private PermissionRequest pendingAudioPermissionRequest;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
 
     @Override
     public void onStart() {

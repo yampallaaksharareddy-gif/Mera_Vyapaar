@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, Bot, User, RefreshCw, CheckCircle2, Mic, MicOff } from 'lucide-react';
 import { LedgerEntry, SupportedLanguage } from '../types';
 import { TRANSLATIONS } from '../constants/translations';
-import { bhashiniSTTEngine, BHASHINI_LANG_CODES } from '../services/bhashiniSttService';
 import { apiUrl } from '../utils/apiUrl';
+import { generateLocalAI } from '../services/localAIService';
 
 interface AskAiViewProps {
   currentLang: SupportedLanguage;
@@ -33,8 +33,68 @@ const getWelcomeMessage = (lang: SupportedLanguage, name: string) => {
       return `নমস্কার ${name}! আমি আপনার **ব্যাপার মিত্র এআই** উপদেষ্টা। আপনি আমাকে দৈনন্দিন খরচ, মুদ্রা ঋণ যোগ্যতা (MUDRA), মান্ডি দর বা ব্যবসা বৃদ্ধি সম্পর্কে আপনার নিজের বাংলা ভাষায় যেকোনো প্রশ্ন করতে পারেন। মাইক চেপে মুখে বলেও প্রশ্ন করতে পারেন (ভাষিণী এসটিটি)।`;
     case 'en':
     default:
-      return `Namaste ${name}! I am your **Vyapaar Mitra AI** advisor. Ask me anything about your daily ledger, MUDRA loan pre-qualification, APMC mandi rates, or business growth strategies in your selected language. You can also tap the mic to speak using Bhashini STT!`;
+      return `Namaste ${name}! I am your **Vyapaar Mitra AI** advisor. Ask me anything about your daily ledger, MUDRA loan pre-qualification, APMC mandi rates, or business growth strategies in your selected language. You can also tap the mic to speak using voice input!`;
   }
+};
+
+const getClientFallbackReply = (prompt: string, lang: SupportedLanguage, ledgerSummary: string): string => {
+  const fallbackMap: Record<SupportedLanguage, string> = {
+    hi: `(व्यापार मित्र एआई - मार्गदर्शिका)
+
+नमस्ते! आपके प्रश्न "${prompt}" एवं बहीखाता संदर्भ (${ledgerSummary}) के आधार पर मुख्य सलाह:
+
+1. **नकदी प्रवाह (Cash Flow) प्रबंधन**: अपनी दैनिक बिक्री और खर्चों का नियमित हिसाब रखें ताकि आपका डिजिटल बहीखाता व्यवस्थित रहे।
+2. **कार्यशील पूंजी (Working Capital)**: आगामी मौसम के माल या स्टॉक खरीद के लिए 15-20% आपातकालीन नकदी सुरक्षित रखें।
+3. **सरकारी योजनाएं एवं ऋण**: आप अपनी आधिकारिक पात्रता के अनुसार पीएम मुद्रा योजना (शिशु/किशोर) या PMEGP योजनाओं की जानकारी प्राप्त कर सकते हैं।
+4. **मंडी भाव तुलना**: कृषि उपज बेचने से पूर्व निकटतम APMC थोक मंडियों के दरों की तुलना अवश्य करें।`,
+
+    mr: `(व्यापार मित्र एआय - मार्गदर्शक मोड)
+
+नमस्कार! तुमच्या प्रश्न "${prompt}" व खातेवही संदर्भ (${ledgerSummary}) नुसार आमचा सल्ला:
+
+1. **रोख प्रवाह (Cashflow) शिस्त**: दैनंदिन जमा-खर्चाची नियमित नोंद ठेवा, ज्यामुळे तुमचे डिजिटल बहीखाता अद्ययावत राहील.
+2. **खेळते भांडवल (Working Capital)**: नवीन माल खरेदीसाठी १५-२०% राखीव निधी जवळ ठेवा.
+3. **सरकारी योजना**: आपल्या अधिकृत पात्रतेनुसार पीएम मुद्रा योजना व PMEGP योजनांची माहिती घ्या.
+4. **बाजार समिती सल्ला**: शेतमाल विक्रीपूर्वी नजीकच्या कृषी उत्पन्न बाजार समित्यांच्या दरांची पडताळणी करा.`,
+
+    te: `(వ్యాపార మిత్ర ఏఐ - సలహాదారు మోడ్)
+
+నమస్కారం! మీ ప్రశ్న "${prompt}" మరియు ఖాతా రికార్డుల (${ledgerSummary}) ఆధారంగా మా ముఖ్య సూచనలు:
+
+1. **నగదు ప్రవాహం (Cash Flow)**: రోజువారీ అమ్మకాలు, కొనుగోళ్లను క్రమబద్ధంగా నమోదు చేసుకోండి.
+2. **పని మూలధనం (Working Capital)**: వ్యాపార అవసరాల కోసం కనీసం 15-20% అత్యవసర నిల్వ ఉంచండి.
+3. **ప్రభుత్వ పథకాలు**: మీ అధికారిక అర్హతల ఆధారంగా PM ముద్ర యోజన లేదా PMEGP పథకాల సమాచారాన్ని పరిశీలించండి.
+4. **మండీ ధరలు**: పంటను విక్రయించే ముందు సమీప APMC మార్కెట్ యార్డు ధరలను తనిఖీ చేయండి.`,
+
+    ta: `(வியாபார மித்ரா ஏஐ - ஆலோசகர் பயன்முறை)
+
+வணக்கம்! உங்கள் கேள்வி "${prompt}" மற்றும் பணப்புழக்கம் (${ledgerSummary}) அடிப்படையிலான முக்கிய ஆலோசனைகள்:
+
+1. **பணப்புழக்க ஒழுக்கம்**: தினசரி வரவு செலவுகளை தொடர்ச்சியாக பதிவு செய்து டிஜிட்டல் கணக்கை பராமரிக்கவும்.
+2. **நடைமுறை மூலதனம்**: புதிய சரக்குகள் வாங்க 15-20% சேமிப்பை ரொக்கமாக வைத்திருங்கள்.
+3. **அரசு திட்டங்கள்**: உங்கள் தகுதிக்கு ஏற்ப பிஎம் முத்ரா திட்டம் அல்லது PMEGP திட்டங்களை பரிசீலிக்கவும்.
+4. **மண்டி விற்பனை வழிகாட்டுதல்**: உழவர் சந்தை அல்லது APMC ஒழுங்குமுறை விற்பனைக்கூட நிலவரத்தை கவனித்து விற்பனை செய்யவும்.`,
+
+    bn: `(ব্যাপার মিত্র এআই - সাধারণ নির্দেশিকা)
+
+নমস্কার! আপনার প্রশ্ন "${prompt}" ও খাতার তথ্যের (${ledgerSummary}) ভিত্তিতে প্রধান পরামর্শ:
+
+1. **নগদ প্রবাহ (Cash Flow) শৃঙ্খলা**: প্রতিদিনের বিক্রয় ও খরচের সঠিক হিসাব রাখুন।
+2. **চলতি মূলধন (Working Capital)**: দোকানে নতুন মাল তোলার জন্য ১৫-২০% জরুরি নগদ অর্থ সংরক্ষণ করুন।
+3. **সরকারি প্রকল্প**: আপনার যোগ্যতা অনুযায়ী পিএম মুদ্রা যোজনা বা PMEGP প্রকল্পগুলো সম্পর্কে খোঁজ নিন।
+4. **মান্ডি দর পরামর্শ**: পণ্য বিক্রয়ের পূর্বে নিকটবর্তী এগ্রিকালচারাল মান্ডির দর পর্যবেক্ষণ করুন।`,
+
+    en: `(Vyapaar Mitra AI - Advisor Mode)
+
+Namaste! Based on your query "${prompt}" and business ledger context (${ledgerSummary}):
+
+1. **Cash-Flow Discipline**: Record all daily cash inflows and outflows to build a consistent digital ledger history.
+2. **Working Capital Buffer**: Maintain a cash safety reserve (15-20%) for seasonal inventory restocking.
+3. **Government Scheme Guidance**: You may explore programs like PM MUDRA (Shishu/Kishore) or PMEGP depending on your official profile eligibility.
+4. **APMC Mandi Comparison**: Check nearby APMC wholesale market trends before selling produce to optimize pricing.`
+  };
+
+  return fallbackMap[lang] || fallbackMap.en;
 };
 
 export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, userName = 'Entrepreneur' }) => {
@@ -49,28 +109,30 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
   ]);
   const [inputPrompt, setInputPrompt] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeModelUsed, setActiveModelUsed] = useState<string>('Gemini AI');
+  const [activeModelUsed, setActiveModelUsed] = useState<string>('gemini-2.0-flash');
 
-  // Bhashini STT Engine State
+  // Voice input state
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
   const [audioVolume, setAudioVolume] = useState<number>(0);
   const [sttError, setSttError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<any>(null);
 
-  const langConfig = BHASHINI_LANG_CODES[currentLang] || BHASHINI_LANG_CODES.en;
+  const speechLangs: Record<SupportedLanguage, string> = { hi: 'hi-IN', mr: 'mr-IN', te: 'te-IN', ta: 'ta-IN', bn: 'bn-IN', en: 'en-IN' };
+  const speechLanguage = speechLangs[currentLang] || 'en-IN';
 
   const uiText = {
     hi: {
       advisorTitle: 'व्यापार मित्र एआई सलाहकार',
       advisorSubtitle: 'मुद्रा ऋण, APMC मंडी भाव व नकदी प्रवाह सहायक',
       liveSearch: 'सर्च ग्राउंडिंग सक्रिय',
-      bhashiniPill: 'भाषिणी एसटीटी',
-      listening: 'भाषिणी एसटीटी सक्रिय: बोलें...',
+      voicePill: 'आवाज़ इनपुट',
+      listening: 'आवाज़ सक्रिय: बोलें...',
       placeholder: 'अपना प्रश्न यहां पूछें या माइक दबाकर बोलें...',
-      listeningPlaceholder: 'भाषिणी सुन रहा है... कृपया स्पष्ट बोलें',
+      listeningPlaceholder: 'आवाज़ सुन रहा है... कृपया स्पष्ट बोलें',
       send: 'भेजें',
       consulting: 'व्यापार मित्र एआई से परामर्श हो रहा है...',
       networkError: '⚠️ नेटवर्क समस्या। कृपया इंटरनेट कनेक्शन जांचें।',
@@ -80,10 +142,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
       advisorTitle: 'व्यापार मित्र एआय सल्लागार',
       advisorSubtitle: 'मुद्रा कर्ज, बाजार समिती भाव व रोख प्रवाह सहायक',
       liveSearch: 'लाईव्ह सर्च सुरू',
-      bhashiniPill: 'भाषिणी एसटीटी',
-      listening: 'भाषिणी एसटीटी सुरू आहे: बोला...',
+      voicePill: 'आवाज़ इनपुट',
+      listening: 'आवाज़ सक्रिय आहे: बोला...',
       placeholder: 'आपला प्रश्न येथे विचारा किंवा माइक दाबून बोला...',
-      listeningPlaceholder: 'भाषिणी ऐकत आहे... कृपया स्पष्ट बोला',
+      listeningPlaceholder: 'आवाज़ ऐकत आहे... कृपया स्पष्ट बोला',
       send: 'पाठवा',
       consulting: 'व्यापार मित्र एआय कडून सल्ला मिळवत आहे...',
       networkError: '⚠️ नेटवर्क त्रुटी. कृपया इंटरनेट कनेक्शन तपासा.',
@@ -93,10 +155,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
       advisorTitle: 'వ్యాపార మిత్ర ఏఐ సలహాదారు',
       advisorSubtitle: 'ముద్ర రుణాలు, మార్కెట్ యార్డ్ ధరలు & నగదు ప్రవాహ సహాయకుడు',
       liveSearch: 'లైవ్ సెర్చ్ యాక్టివ్',
-      bhashiniPill: 'భాషిణి ఎస్టీటీ',
-      listening: 'భాషిణి ఎస్టీటీ యాక్టివ్: మాట్లాడండి...',
+      voicePill: 'వాయిస్ ఇన్‌పుట్',
+      listening: 'వాయిస్ యాక్టివ్: మాట్లాడండి...',
       placeholder: 'మీ ప్రశ్నను ఇక్కడ అడగండి లేదా మాట్లాడండి...',
-      listeningPlaceholder: 'భాషిణి వింటోంది... స్పష్టంగా మాట్లాడండి',
+      listeningPlaceholder: 'వాయిస్ వింటోంది... స్పష్టంగా మాట్లాడండి',
       send: 'పంపు',
       consulting: 'వ్యాపార మిత్ర ఏఐ సలహా పొందుతోంది...',
       networkError: '⚠️ నెట్‌వర్క్ సమస్య. దయచేసి ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేయండి.',
@@ -106,10 +168,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
       advisorTitle: 'வியாபார மித்ரா ஏஐ ஆலோசகர்',
       advisorSubtitle: 'முத்ரா கடன், ஒழுங்குமுறை விற்பனைக்கூடம் & பணப்புழக்க உதவியாளர்',
       liveSearch: 'நேரலை தேடல் இயங்குகிறது',
-      bhashiniPill: 'பாஷினி எஸ்டிடி',
-      listening: 'பாஷினி எஸ்டிடி இயங்குகிறது: பேசுங்கள்...',
+      voicePill: 'குரல் உள்ளீடு',
+      listening: 'குரல் இயங்குகிறது: பேசுங்கள்...',
       placeholder: 'உங்கள் கேள்வியை இங்கே கேட்கவும் அல்லது பேசவும்...',
-      listeningPlaceholder: 'பாஷினி கேட்கிறது... தெளிவாக பேசவும்',
+      listeningPlaceholder: 'குரல் கேட்கிறது... தெளிவாக பேசவும்',
       send: 'அனுப்பு',
       consulting: 'வியாபார மித்ரா ஏஐ ஆலோசனை பெறுகிறது...',
       networkError: '⚠️ பிணைய சிக்கல். இணைய இணைப்பை சரிபார்க்கவும்.',
@@ -119,10 +181,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
       advisorTitle: 'ব্যাপার মিত্র এআই উপদেষ্টা',
       advisorSubtitle: 'মুদ্রা ঋণ, মান্ডি দর ও নগদ প্রবাহ সহায়ক',
       liveSearch: 'লাইভ অনুসন্ধান সক্রিয়',
-      bhashiniPill: 'ভাষিণী এসটিটি',
-      listening: 'ভাষিণী এসটিটি সক্রিয়: বলুন...',
+      voicePill: 'ভয়েস ইনপুট',
+      listening: 'ভয়েস সক্রিয়: বলুন...',
       placeholder: 'আপনার প্রশ্ন এখানে লিখুন বা মাইক চেপে বলুন...',
-      listeningPlaceholder: 'ভাষিণী শুনছে... স্পষ্ট করে বলুন',
+      listeningPlaceholder: 'ভয়েস শুনছে... স্পষ্ট করে বলুন',
       send: 'পাঠান',
       consulting: 'ব্যাপার মিত্র এআই পরামর্শ প্রক্রিয়াধীন...',
       networkError: '⚠️ নেটওয়ার্ক সমস্যা। অনুগ্রহ করে ইন্টারনেট সংযোগ পরীক্ষা করুন।',
@@ -132,10 +194,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
       advisorTitle: 'Mera Vyapaar AI Advisor',
       advisorSubtitle: 'Vernacular MUDRA, APMC Mandi, and Cashflow Assistant',
       liveSearch: 'Live Search Grounding',
-      bhashiniPill: 'Bhashini STT',
-      listening: 'Bhashini STT Active: Speak now...',
+      voicePill: 'Voice Input',
+      listening: 'Voice input active: Speak now...',
       placeholder: 'Ask your business, loan or APMC mandi question here or speak...',
-      listeningPlaceholder: 'Bhashini is listening... speak clearly',
+      listeningPlaceholder: 'Listening... speak clearly',
       send: 'Send',
       consulting: 'Consulting Vyapaar Mitra AI in selected language...',
       networkError: '⚠️ Network connectivity issue. Please check your internet connection.',
@@ -145,10 +207,10 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
     advisorTitle: 'Mera Vyapaar AI Advisor',
     advisorSubtitle: 'Vernacular MUDRA, APMC Mandi, and Cashflow Assistant',
     liveSearch: 'Live Search Grounding',
-    bhashiniPill: 'Bhashini STT',
-    listening: 'Bhashini STT Active: Speak now...',
+    voicePill: 'Voice Input',
+    listening: 'Voice input active: Speak now...',
     placeholder: 'Ask your business, loan or APMC mandi question here or speak...',
-    listeningPlaceholder: 'Bhashini is listening... speak clearly',
+    listeningPlaceholder: 'Listening... speak clearly',
     send: 'Send',
     consulting: 'Consulting Vyapaar Mitra AI in selected language...',
     networkError: '⚠️ Network connectivity issue. Please check your internet connection.',
@@ -213,71 +275,82 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      bhashiniSTTEngine.stopSession().catch(() => {});
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch (_) {}
+        recognitionRef.current = null;
+      }
     };
   }, []);
 
-  const handleToggleBhashiniSTT = async () => {
+  const handleToggleVoiceInput = async () => {
     setSttError(null);
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (isRecording) {
+      try { recognitionRef.current?.stop(); } catch (_) {}
+      recognitionRef.current = null;
       if (timerRef.current) clearInterval(timerRef.current);
       setIsRecording(false);
       setAudioVolume(0);
-      try {
-        const result = await bhashiniSTTEngine.stopSession();
-        if (result.transcript) {
-          setInputPrompt((prev) => (prev ? `${prev} ${result.transcript}` : result.transcript));
-        }
-      } catch (err: any) {
-        console.warn('Error stopping Bhashini STT:', err);
-      }
       return;
     }
 
-    setIsRecording(true);
-    setRecordingSeconds(0);
-    setAudioVolume(10);
+    if (!SpeechRecognition) {
+      setSttError(uiText.speechError);
+      return;
+    }
 
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setRecordingSeconds((prev) => prev + 1);
-    }, 1000);
+    const recognition = new SpeechRecognition();
+    recognition.lang = speechLanguage;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      setAudioVolume(10);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => setRecordingSeconds((prev) => prev + 1), 1000);
+    };
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0]?.transcript || '';
+      }
+      if (transcript.trim()) setInputPrompt(transcript.trim());
+    };
+
+    recognition.onerror = () => {
+      setSttError(uiText.speechError);
+      setIsRecording(false);
+      setAudioVolume(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      setAudioVolume(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      recognitionRef.current = null;
+    };
 
     try {
-      await bhashiniSTTEngine.startSession(
-        currentLang,
-        (interim) => {
-          if (interim) {
-            setInputPrompt(interim);
-          }
-        },
-        (finalResult) => {
-          if (finalResult && finalResult.transcript) {
-            setInputPrompt(finalResult.transcript);
-          }
-        },
-        (err) => {
-          console.warn('Bhashini STT Engine error:', err);
-          setSttError(uiText.speechError);
-          setIsRecording(false);
-          if (timerRef.current) clearInterval(timerRef.current);
-        },
-        (volume) => {
-          setAudioVolume(volume);
-        }
-      );
-    } catch (err: any) {
-      console.warn('Could not launch Bhashini STT session:', err);
+      recognition.start();
+    } catch (err) {
+      console.warn('Voice input could not start:', err);
       setSttError(uiText.speechError);
       setIsRecording(false);
       if (timerRef.current) clearInterval(timerRef.current);
+      recognitionRef.current = null;
     }
   };
 
   const handleSend = async (textToSend?: string) => {
     if (isRecording) {
-      await handleToggleBhashiniSTT();
+      await handleToggleVoiceInput();
     }
 
     const prompt = textToSend || inputPrompt;
@@ -297,54 +370,114 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
     const totalIncome = entries.filter(e => e.transactionType === 'INCOME').reduce((s, e) => s + e.amount, 0);
     const totalExpense = entries.filter(e => e.transactionType === 'EXPENSE').reduce((s, e) => s + e.amount, 0);
     const ledgerSummary = `Total Transactions: ${entries.length}, Total Income: ₹${totalIncome}, Total Expenses: ₹${totalExpense}, Net Cashflow: ₹${totalIncome - totalExpense}`;
+    const history = messages.slice(-6).map((m) => ({ role: m.role, text: m.text }));
 
     try {
-      const response = await fetch(apiUrl('/api/ai/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          language: currentLang,
-          ledgerSummary,
-          history: messages.slice(-10).map((m) => ({ role: m.role, text: m.text }))
-        })
-      });
+      let data: any = null;
+      let responseStatus: number | null = null;
 
-      const data: any = await response.json().catch(() => ({}));
-      if (!response.ok || data?.success !== true || typeof data?.reply !== 'string' || !data.reply.trim()) {
+      try {
+        const response = await fetch(apiUrl('/api/ai/chat'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prompt,
+            language: currentLang,
+            ledgerSummary,
+            history
+          })
+        });
+
+        responseStatus = response.status;
+        data = await response.json().catch(() => ({}));
+
+        if (response.ok && typeof data?.reply === 'string' && data.reply.trim()) {
+          const modelUsed = data.modelUsed || 'Gemini AI';
+          setActiveModelUsed(modelUsed);
+
+          const aiMsg: ChatMessage = {
+            id: `msg-ai-${Date.now()}`,
+            role: 'assistant',
+            text: data.reply.trim(),
+            modelUsed,
+            timestamp: Date.now()
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          return;
+        }
+
+        // Retry locally for Gemini quota/rate-limit failures and server failures.
+        if (response.status === 429 || response.status >= 500) {
+          console.warn(`Gemini/Render request failed with HTTP ${response.status}; trying on-device Qwen3.`);
+          throw new Error(`LOCAL_AI_FALLBACK_HTTP_${response.status}`);
+        }
+
+        // Preserve the requested fallback behavior for other unsuccessful responses,
+        // but do not waste time downloading the local model for ordinary client errors.
         throw new Error(data?.error || `AI request failed (HTTP ${response.status})`);
-      }
+      } catch (fetchErr) {
+        const shouldTryLocal =
+          responseStatus === null ||
+          responseStatus === 429 ||
+          responseStatus >= 500;
 
-      const modelUsed = data.modelUsed || 'Gemini AI';
+        if (!shouldTryLocal) {
+          console.warn('AI backend returned a non-retryable response:', fetchErr);
+          throw fetchErr;
+        }
+
+        console.warn('Gemini/Render unavailable; trying on-device Qwen3:', fetchErr);
+
+        try {
+          const localResult = await generateLocalAI({
+            prompt,
+            language: currentLang,
+            ledgerSummary,
+            history
+          });
+
+          setActiveModelUsed(localResult.model);
+
+          const aiMsg: ChatMessage = {
+            id: `msg-ai-local-${Date.now()}`,
+            role: 'assistant',
+            text: localResult.reply,
+            modelUsed: localResult.model,
+            timestamp: Date.now()
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          return;
+        } catch (localErr) {
+          console.warn('On-device Qwen3 generation failed; using basic advisory fallback:', localErr);
+        }
+
+        const replyText = getClientFallbackReply(prompt, currentLang, ledgerSummary);
+        const modelUsed = 'Vyapaar Mitra AI Advisory Engine (basic fallback)';
+
+        setActiveModelUsed(modelUsed);
+        const aiMsg: ChatMessage = {
+          id: `msg-ai-fallback-${Date.now()}`,
+          role: 'assistant',
+          text: replyText,
+          modelUsed,
+          timestamp: Date.now()
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+      }
+    } catch (err: any) {
+      console.warn('AI Advisor request failed:', err);
+
+      const replyText = getClientFallbackReply(prompt, currentLang, ledgerSummary);
+      const modelUsed = 'Vyapaar Mitra AI Advisory Engine (basic fallback)';
+
       setActiveModelUsed(modelUsed);
       const aiMsg: ChatMessage = {
-        id: `msg-ai-${Date.now()}`,
+        id: `msg-ai-final-fallback-${Date.now()}`,
         role: 'assistant',
-        text: data.reply.trim(),
+        text: replyText,
         modelUsed,
         timestamp: Date.now()
       };
-      setMessages((prev) => [...prev, aiMsg]);
-    } catch (err: any) {
-      console.error('AI Advisor request failed:', err);
-      const aiMsg: ChatMessage = {
-        id: `msg-error-${Date.now()}`,
-        role: 'assistant',
-        text: currentLang === 'te'
-          ? 'ప్రస్తుతం AI సమాధానం రూపొందించలేకపోయింది. దయచేసి కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి.'
-          : currentLang === 'hi'
-            ? 'अभी AI जवाब नहीं दे सका। कृपया थोड़ी देर बाद फिर कोशिश करें।'
-            : currentLang === 'mr'
-              ? 'आत्ता AI उत्तर तयार करू शकले नाही. कृपया थोड्या वेळाने पुन्हा प्रयत्न करा.'
-              : currentLang === 'ta'
-                ? 'தற்போது AI பதிலை உருவாக்க முடியவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயற்சிக்கவும்.'
-                : currentLang === 'bn'
-                  ? 'এই মুহূর্তে AI উত্তর তৈরি করতে পারেনি। অনুগ্রহ করে কিছুক্ষণ পরে আবার চেষ্টা করুন।'
-                  : 'I could not generate an AI response right now. Please try again shortly.',
-        modelUsed: 'Service unavailable',
-        timestamp: Date.now()
-      };
-      setActiveModelUsed('Service unavailable');
       setMessages((prev) => [...prev, aiMsg]);
     } finally {
       setIsLoading(false);
@@ -416,7 +549,7 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
                 {msg.modelUsed && !isUser && (
                   <div className="mt-2 pt-1.5 border-t border-stone-800 text-[10px] text-stone-500 font-mono flex items-center gap-1.5">
                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                    <span>{langConfig.label} • {msg.modelUsed}</span>
+                    <span>{speechLanguage} • {msg.modelUsed}</span>
                   </div>
                 )}
               </div>
@@ -445,13 +578,13 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
         </div>
       )}
 
-      {/* Recording Visualizer Bar when Bhashini STT is active */}
+      {/* Recording Visualizer Bar when voice input is active */}
       {isRecording && (
         <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl px-4 py-2 mb-2 flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
             <span className="text-xs font-semibold text-rose-300">
-              {uiText.listening} ({langConfig.label})
+              {uiText.listening} ({speechLanguage})
             </span>
           </div>
 
@@ -483,13 +616,13 @@ export const AskAiView: React.FC<AskAiViewProps> = ({ currentLang, entries, user
         </div>
       )}
 
-      {/* Input Bar with Bhashini STT Microphone & Send */}
+      {/* Input Bar with voice input Microphone & Send */}
       <div className="bg-stone-950 border border-stone-800 rounded-2xl p-2.5 flex items-center gap-2 shadow-lg">
-        {/* Bhashini STT Microphone Button (Icon-Only) */}
+        {/* voice input Microphone Button (Icon-Only) */}
         <button
           type="button"
-          onClick={handleToggleBhashiniSTT}
-          title={isRecording ? 'Stop recording' : `Speak in ${langConfig.label} using Bhashini STT Engine`}
+          onClick={handleToggleVoiceInput}
+          title={isRecording ? 'Stop recording' : `Speak in ${speechLanguage} using voice input Engine`}
           className={`w-11 h-11 rounded-xl flex items-center justify-center transition cursor-pointer shrink-0 ${
             isRecording
               ? 'bg-rose-600 text-white shadow-lg shadow-rose-950 animate-pulse'

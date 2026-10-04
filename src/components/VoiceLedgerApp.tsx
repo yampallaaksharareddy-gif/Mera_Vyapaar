@@ -1,6 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import {
   Mic,
   MicOff,
@@ -11,15 +9,12 @@ import {
   Trash2,
   RefreshCw,
   Sparkles,
-  Radio,
-  Volume2,
-  Square
+  Radio
 } from 'lucide-react';
 import { LedgerEntry, SupportedLanguage, TransactionType } from '../types';
 import { TRANSLATIONS } from '../constants/translations';
 import { parseVernacularVoiceInput } from '../utils/nlpParser';
 import { getLocalizedCategory, getLocalizedPartyPrefix, getLocalizedSourceText, getLocalizedDateString } from '../utils/categoryHelper';
-import { bhashiniSTTEngine } from '../services/bhashiniSttService';
 
 interface VoiceLedgerAppProps {
   entries: LedgerEntry[];
@@ -31,45 +26,6 @@ interface VoiceLedgerAppProps {
   creditScore: number;
   onOpenCreditModal: () => void;
 }
-
-const getNetCashflowTtsSentence = (netCashflow: number, lang: SupportedLanguage): string => {
-  const absAmountStr = Math.abs(netCashflow).toLocaleString('en-IN');
-  const isNegative = netCashflow < 0;
-  const isZero = netCashflow === 0;
-
-  switch (lang) {
-    case 'hi':
-      if (isZero) return 'आपका इस महीने का शुद्ध नकद प्रवाह शून्य रुपये है।';
-      if (isNegative) return `आपका इस महीने का शुद्ध नकद प्रवाह माइनस ${absAmountStr} रुपये है।`;
-      return `आपका इस महीने का शुद्ध नकद प्रवाह ${absAmountStr} रुपये है।`;
-
-    case 'mr':
-      if (isZero) return 'आपला या महिन्याचा निव्वळ रोख प्रवाह शून्य रुपये आहे.';
-      if (isNegative) return `आपला या महिन्याचा निव्वळ रोख प्रवाह उणे ${absAmountStr} रुपये आहे.`;
-      return `आपला या महिन्याचा निव्वळ रोख प्रवाह ${absAmountStr} रुपये आहे.`;
-
-    case 'te':
-      if (isZero) return 'మీ ఈ నెల నికర నగదు ప్రవాహం సున్నా రూపాయలు.';
-      if (isNegative) return `మీ ఈ నెల నికర నగదు ప్రవాహం మైనస్ ${absAmountStr} రూపాయలు.`;
-      return `మీ ఈ నెల నికర నగదు ప్రవాహం ${absAmountStr} రూపాయలు.`;
-
-    case 'ta':
-      if (isZero) return 'உங்கள் இந்த மாத நிகர பணப்புழக்கம் பூஜ்ஜியம் ரூபாய்.';
-      if (isNegative) return `உங்கள் இந்த மாத நிகர பணப்புழக்கம் மைனஸ் ${absAmountStr} ரூபாய்.`;
-      return `உங்கள் இந்த மாத நிகர பணப்புழக்கம் ${absAmountStr} ரூபாய்.`;
-
-    case 'bn':
-      if (isZero) return 'আপনার এই মাসের নিট নগদ প্রবাহ শূন্য টাকা।';
-      if (isNegative) return `আপনার এই মাসের নিট নগদ প্রবাহ মাইনাস ${absAmountStr} টাকা।`;
-      return `আপনার এই মাসের নিট নগদ প্রবাহ ${absAmountStr} টাকা।`;
-
-    case 'en':
-    default:
-      if (isZero) return 'Your current month net cashflow is zero rupees.';
-      if (isNegative) return `Your current month net cashflow is minus ${absAmountStr} rupees.`;
-      return `Your current month net cashflow is ${absAmountStr} rupees.`;
-  }
-};
 
 export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
   entries,
@@ -88,13 +44,14 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
-  // Text-to-Speech (TTS) State & Lifecycle
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
   // Speech Recognition instance
   const recognitionRef = useRef<any>(null);
   const timerRef = useRef<any>(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    try { recognitionRef.current?.stop(); } catch (_) {}
+  }, []);
 
   const getSpeakingPromptHint = (lang: SupportedLanguage) => {
     switch (lang) {
@@ -124,129 +81,6 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
   const netCashflow = totalIncome - totalExpense;
   const unsyncedCount = entries.filter((e) => !e.isSynced).length;
 
-  // Cleanup TTS on unmount or language change
-  useEffect(() => {
-    return () => {
-      if (Capacitor.isNativePlatform()) {
-        TextToSpeech.stop().catch(() => {});
-      } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isSpeaking) {
-      if (Capacitor.isNativePlatform()) {
-        TextToSpeech.stop().catch(() => {});
-      } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-      setIsSpeaking(false);
-    }
-  }, [currentLang]);
-
-  const handleToggleTts = async () => {
-    const isNative = Capacitor.isNativePlatform();
-
-    if (isSpeaking) {
-      try {
-        if (isNative) {
-          await TextToSpeech.stop();
-        } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-        }
-      } catch (err) {
-        console.warn('TTS stop notice:', err);
-      } finally {
-        setIsSpeaking(false);
-      }
-      return;
-    }
-
-    const sentence = getNetCashflowTtsSentence(netCashflow, currentLang);
-    const bcp47Map: Record<SupportedLanguage, string> = {
-      en: 'en-IN',
-      hi: 'hi-IN',
-      mr: 'mr-IN',
-      te: 'te-IN',
-      ta: 'ta-IN',
-      bn: 'bn-IN'
-    };
-    const targetLang = bcp47Map[currentLang] || 'en-IN';
-
-    if (isNative) {
-      try {
-        await TextToSpeech.stop().catch(() => {});
-        setIsSpeaking(true);
-
-        await TextToSpeech.speak({
-          text: sentence,
-          lang: targetLang,
-          rate: 0.95,
-          pitch: 1.0,
-          volume: 1.0,
-          category: 'ambient'
-        });
-      } catch (err: any) {
-        console.warn('Native Android TTS error:', err);
-        const engineNotice: Record<SupportedLanguage, string> = {
-          en: '⚠️ Native Text-to-Speech voice engine unavailable on this device.',
-          hi: '⚠️ आपके डिवाइस पर इस भाषा की टेक्स्ट-टू-स्पीच सेवा उपलब्ध नहीं है।',
-          mr: '⚠️ आपल्या डिव्हाइसवर या भाषेची व्हॉईस सेवा उपलब्ध नाही.',
-          te: '⚠️ మీ పరికరంలో ఈ భాషకు వాయిస్ ఇంజిన్ అందుబాటులో లేదు.',
-          ta: '⚠️ சாதனத்தில் இந்த மொழிக்கான குரல் சேவை இல்லை.',
-          bn: '⚠️ আপনার ডিভাইসে এই ভাষার ভয়েস সেবা উপলব্ধ নেই।'
-        };
-        showToast(engineNotice[currentLang] || engineNotice.en);
-      } finally {
-        setIsSpeaking(false);
-      }
-    } else {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        const unsupportedMsg: Record<SupportedLanguage, string> = {
-          en: '⚠️ Text-to-Speech is not supported on this browser.',
-          hi: '⚠️ इस ब्राउज़र पर टेक्स्ट-टू-स्पीच उपलब्ध नहीं है।',
-          mr: '⚠️ या ब्राऊझरवर टेक्स्ट-टू-स्पीच उपलब्ध नाही.',
-          te: '⚠️ ఈ బ్రౌజర్‌లో టెక్స్ట్-టు-స్పీచ్ అందుబాటులో లేదు.',
-          ta: '⚠️ இந்த உலாவியில் உரை பேச்சு வசதி இல்லை.',
-          bn: '⚠️ এই ব্রাউজারে টেক্সট-টু-স্পিচ সমর্থিত নয়।'
-        };
-        showToast(unsupportedMsg[currentLang] || unsupportedMsg.en);
-        return;
-      }
-
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(sentence);
-      utterance.lang = targetLang;
-      utterance.rate = 0.95;
-
-      const voices = window.speechSynthesis.getVoices();
-      const lowerLang = targetLang.toLowerCase();
-      const matchedVoice = voices.find(
-        (v) =>
-          v.lang.toLowerCase().replace('_', '-') === lowerLang ||
-          v.lang.toLowerCase().startsWith(lowerLang.slice(0, 2))
-      );
-      if (matchedVoice) {
-        utterance.voice = matchedVoice;
-      }
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-      };
-
-      utterance.onerror = (e) => {
-        console.warn('Browser SpeechSynthesis notice:', e);
-        setIsSpeaking(false);
-      };
-
-      setIsSpeaking(true);
-      window.speechSynthesis.speak(utterance);
-    }
-  };
-
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -262,50 +96,74 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
     }, 3800);
   };
 
-  // Start voice recording with Digital India Bhashini STT Engine
+  // Start voice recording with the Android/Web Speech Recognition API.
   const handleToggleVoice = async () => {
     if (isRecording) {
       await stopVoiceAndProcess(recognizedText || '');
       return;
     }
 
-    setIsRecording(true);
-    setRecognizedText('');
-    setRecordingSeconds(0);
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      showToast(currentLang === 'hi' ? 'माइक्रोफ़ोन वॉइस इनपुट उपलब्ध नहीं है।' : 'Voice input is not available on this device.');
+      return;
+    }
 
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setRecordingSeconds((prev) => prev + 1);
-    }, 1000);
+    const speechLangs: Record<SupportedLanguage, string> = { hi: 'hi-IN', mr: 'mr-IN', te: 'te-IN', ta: 'ta-IN', bn: 'bn-IN', en: 'en-IN' };
+    const recognition = new SpeechRecognition();
+    recognition.lang = speechLangs[currentLang] || 'en-IN';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
 
-    // Launch Bhashini STT Engine session with targeted vernacular speech recognition
+    recognition.onstart = () => {
+      setIsRecording(true);
+      setRecognizedText('');
+      setRecordingSeconds(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => setRecordingSeconds((prev) => prev + 1), 1000);
+    };
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0]?.transcript || '';
+      }
+      if (transcript.trim()) setRecognizedText(transcript.trim());
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('Voice input error:', event?.error || event);
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      recognitionRef.current = null;
+      showToast(currentLang === 'hi' ? 'माइक्रोफ़ोन सूचना: कृपया स्पष्ट बोलें।' : 'Microphone notice: please speak clearly.');
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      recognitionRef.current = null;
+    };
+
     try {
-      await bhashiniSTTEngine.startSession(
-        currentLang,
-        (interimText) => {
-          setRecognizedText(interimText);
-        },
-        (finalResult) => {
-          if (finalResult && finalResult.transcript) {
-            setRecognizedText(finalResult.transcript);
-          }
-        },
-        (err) => {
-          console.warn('Bhashini STT session notice:', err);
-        }
-      );
+      recognition.start();
     } catch (e) {
-      console.warn('Bhashini engine connection:', e);
+      console.warn('Voice input could not start:', e);
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      recognitionRef.current = null;
     }
   };
 
   const stopVoiceAndProcess = async (spokenText: string) => {
     if (timerRef.current) clearInterval(timerRef.current);
-
+    try { recognitionRef.current?.stop(); } catch (_) {}
+    recognitionRef.current = null;
     setIsRecording(false);
 
-    const bhashiniResult = await bhashiniSTTEngine.stopSession();
-    const finalTranscript = (bhashiniResult.transcript || spokenText || recognizedText || '').trim();
+    const finalTranscript = (spokenText || recognizedText || '').trim();
 
     if (!finalTranscript) {
       setIsProcessing(false);
@@ -346,7 +204,7 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
         sourceText: finalTranscript,
         notes: parsed.customerOrEntity
           ? `${partyPrefix}: ${parsed.customerOrEntity}`
-          : (currentLang === 'en' ? 'Bhashini Voice Entry' : `${t.khataTab} (Bhashini STT)`)
+          : (currentLang === 'en' ? 'Voice Entry' : t.khataTab)
       });
 
       setIsProcessing(false);
@@ -355,7 +213,7 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto pb-32 min-w-0">
+    <div className="w-full max-w-4xl mx-auto pb-32">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-stone-900 border border-emerald-500/60 text-emerald-200 px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-sm font-medium animate-bounce">
@@ -371,26 +229,9 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
 
         <div className="relative z-10">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <span className="text-xs font-semibold tracking-wider uppercase text-emerald-400/90 flex items-center gap-1.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-              <span className="truncate">{t.netCashflow}</span>
-              <button
-                type="button"
-                onClick={handleToggleTts}
-                aria-label={isSpeaking ? 'Stop reading net cashflow' : 'Read current month net cashflow aloud'}
-                title={isSpeaking ? 'Stop reading' : 'Read aloud'}
-                className={`ml-1 inline-flex items-center justify-center p-1.5 rounded-full transition-all shrink-0 ${
-                  isSpeaking
-                    ? 'bg-emerald-500 text-stone-950 animate-pulse ring-2 ring-emerald-400/50'
-                    : 'bg-stone-800/90 text-stone-300 hover:text-white hover:bg-stone-700/90 border border-stone-700/60'
-                }`}
-              >
-                {isSpeaking ? (
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5" />
-                )}
-              </button>
+            <span className="text-xs font-semibold tracking-wider uppercase text-emerald-400/90 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              {t.netCashflow}
             </span>
           </div>
 
@@ -480,10 +321,9 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
               return (
                 <div
                   key={entry.id}
-                  className="group bg-stone-900/90 hover:bg-stone-850 border border-stone-800/80 hover:border-stone-700/80 rounded-2xl p-3.5 sm:p-4 transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 shadow-sm min-w-0"
+                  className="group bg-stone-900/90 hover:bg-stone-850 border border-stone-800/80 hover:border-stone-700/80 rounded-2xl p-4 transition-all flex items-center justify-between gap-4 shadow-sm"
                 >
-                  {/* Entry information */}
-                  <div className="flex items-start gap-3 min-w-0 flex-1 w-full">
+                  <div className="flex items-center gap-3.5 min-w-0">
                     {/* Direction Icon */}
                     <div
                       className={`w-11 h-11 rounded-2xl flex-shrink-0 flex items-center justify-center ${
@@ -500,16 +340,15 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
                     </div>
 
                     {/* Metadata */}
-                    <div className="min-w-0 flex-1 w-0 sm:w-auto">
-                      <div className="flex items-start gap-2 min-w-0">
-                        <p className="text-sm font-bold text-stone-100 leading-5 break-words min-w-0 flex-1">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-stone-100 truncate">
                           {getLocalizedCategory(entry.category, currentLang)}
                         </p>
-
                         {/* Sync Status Badge */}
                         {entry.isSynced ? (
                           <span
-                            className="inline-flex items-center gap-1 text-[10px] text-emerald-400/90 font-medium px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/40 shrink-0"
+                            className="inline-flex items-center gap-1 text-[10px] text-emerald-400/90 font-medium px-1.5 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/40"
                             title="Synced to PostgreSQL Cloud"
                           >
                             <CheckCircle2 className="w-3 h-3" />
@@ -517,27 +356,27 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
                           </span>
                         ) : (
                           <span
-                            className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 shrink-0"
+                            className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/40"
                             title="Stored in local encrypted Room DB only"
                           >
                             <AlertCircle className="w-3 h-3" />
-                            <span className="hidden sm:inline">Room DB</span>
+                            <span>Room DB</span>
                           </span>
                         )}
                       </div>
 
                       {localizedSourceText && (
-                        <p className="text-xs text-stone-400 italic mt-0.5 break-words leading-5">
+                        <p className="text-xs text-stone-400 italic truncate max-w-sm sm:max-w-md">
                           "{localizedSourceText}"
                         </p>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[11px] text-stone-500 font-mono break-words">
-                        <span className="break-words">{dateStr}</span>
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-stone-500 font-mono">
+                        <span>{dateStr}</span>
                         {entry.notes && (
                           <>
-                            <span className="shrink-0">•</span>
-                            <span className="break-words min-w-0">
+                            <span>•</span>
+                            <span className="truncate max-w-xs">
                               {getLocalizedPartyPrefix(entry.notes, currentLang)}
                             </span>
                           </>
@@ -547,10 +386,10 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
                   </div>
 
                   {/* Amount & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto sm:flex-shrink-0 border-t border-stone-800/70 sm:border-t-0 pt-2.5 sm:pt-0">
-                    <div className="text-left sm:text-right min-w-0">
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <div className="text-right">
                       <p
-                        className={`text-base sm:text-lg font-bold font-mono whitespace-nowrap ${
+                        className={`text-base sm:text-lg font-bold font-mono ${
                           isIncome ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
@@ -564,7 +403,7 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
 
                     <button
                       onClick={() => onDeleteEntry(entry.id)}
-                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-2 text-stone-500 hover:text-rose-400 hover:bg-stone-800 rounded-lg transition shrink-0"
+                      className="opacity-0 group-hover:opacity-100 p-2 text-stone-500 hover:text-rose-400 hover:bg-stone-800 rounded-lg transition"
                       title="Delete entry"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -637,13 +476,13 @@ export const VoiceLedgerApp: React.FC<VoiceLedgerAppProps> = ({
             {isRecording && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/20 text-[10px] text-rose-300 font-mono">
                 <Radio className="w-2.5 h-2.5 animate-pulse" />
-                Bhashini ASR
+                Voice input
               </span>
             )}
           </p>
           <p className="text-[11px] text-stone-400 flex items-center gap-1.5 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span>Bhashini STT • Digital India (हिंदी • मराठी • తెలుగు • தமிழ் • বাংলা • English)</span>
+            <span>Voice input • Android/Web Speech (हिंदी • मराठी • తెలుగు • தமிழ் • বাংলা • English)</span>
           </p>
         </div>
       </div>
